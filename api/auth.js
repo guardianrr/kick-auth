@@ -26,7 +26,7 @@ export default async function handler(req, res) {
     params.append("redirect_uri", process.env.REDIRECT_URI);
     params.append("code_verifier", code_verifier);
 
-    const response = await fetch("https://id.kick.com/oauth/token", {
+    const tokenResponse = await fetch("https://id.kick.com/oauth/token", {
       method: "POST",
       headers: {
         "Content-Type": "application/x-www-form-urlencoded"
@@ -34,22 +34,59 @@ export default async function handler(req, res) {
       body: params.toString()
     });
 
-    const text = await response.text();
-    console.log("RAW KICK RESPONSE:", text);
+    const tokenText = await tokenResponse.text();
+    console.log("RAW TOKEN RESPONSE:", tokenText);
 
-    let data;
+    let tokenData;
     try {
-      data = JSON.parse(text);
+      tokenData = JSON.parse(tokenText);
     } catch {
-      data = { raw: text };
+      tokenData = { raw: tokenText };
     }
 
-    if (!response.ok) {
-      return res.status(400).json(data);
+    if (!tokenResponse.ok) {
+      return res.status(400).json(tokenData);
     }
 
-    return res.status(200).json(data);
+    const accessToken = tokenData.access_token;
+
+    // Buscar utilizador autenticado
+    const userResponse = await fetch("https://api.kick.com/public/v1/users", {
+      method: "GET",
+      headers: {
+        "Authorization": `Bearer ${accessToken}`,
+        "Accept": "application/json"
+      }
+    });
+
+    const userText = await userResponse.text();
+    console.log("RAW USER RESPONSE:", userText);
+
+    let userData;
+    try {
+      userData = JSON.parse(userText);
+    } catch {
+      userData = { raw: userText };
+    }
+
+    // estrutura esperada: { data: [ { name, profile_picture, user_id, email } ], message: "..." }
+    const user = Array.isArray(userData?.data) ? userData.data[0] : null;
+
+    return res.status(200).json({
+      access_token: tokenData.access_token,
+      refresh_token: tokenData.refresh_token || null,
+      expires_in: tokenData.expires_in || null,
+      user: user
+        ? {
+            id: user.user_id || null,
+            username: user.name || "Kick User",
+            avatar: user.profile_picture || "https://kick.com/img/default-profile-pictures/default-avatar-2.webp",
+            email: user.email || null
+          }
+        : null
+    });
   } catch (err) {
+    console.error("SERVER ERROR:", err);
     return res.status(500).json({
       error: "Server crash",
       details: err.message
