@@ -1,5 +1,4 @@
 export default async function handler(req, res) {
-  // ✅ CORS (permite chamadas do teu frontend)
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
@@ -19,7 +18,6 @@ export default async function handler(req, res) {
   }
 
   try {
-    // ✅ FORMATO CORRETO (x-www-form-urlencoded)
     const params = new URLSearchParams();
     params.append("grant_type", "authorization_code");
     params.append("code", code);
@@ -36,7 +34,6 @@ export default async function handler(req, res) {
       body: params.toString()
     });
 
-    // ✅ ler resposta como texto primeiro (evita crash)
     const text = await response.text();
     console.log("RAW KICK RESPONSE:", text);
 
@@ -47,16 +44,12 @@ export default async function handler(req, res) {
       data = { raw: text };
     }
 
-    // ❌ se Kick devolveu erro → envia para frontend
     if (!response.ok) {
       return res.status(400).json(data);
     }
 
-    // ✅ sucesso
     return res.status(200).json(data);
-
   } catch (err) {
-    console.error("SERVER ERROR:", err);
     return res.status(500).json({
       error: "Server crash",
       details: err.message
