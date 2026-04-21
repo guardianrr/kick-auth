@@ -1,4 +1,5 @@
 export default async function handler(req, res) {
+  // ✅ CORS (permite chamadas do teu frontend)
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
@@ -7,37 +8,58 @@ export default async function handler(req, res) {
     return res.status(200).end();
   }
 
-  const { code, code_verifier } = req.body;
+  if (req.method !== "POST") {
+    return res.status(405).json({ error: "Method not allowed" });
+  }
+
+  const { code, code_verifier } = req.body || {};
+
+  if (!code || !code_verifier) {
+    return res.status(400).json({ error: "Missing code or verifier" });
+  }
 
   try {
+    // ✅ FORMATO CORRETO (x-www-form-urlencoded)
+    const params = new URLSearchParams();
+    params.append("grant_type", "authorization_code");
+    params.append("code", code);
+    params.append("client_id", process.env.CLIENT_ID);
+    params.append("client_secret", process.env.CLIENT_SECRET);
+    params.append("redirect_uri", process.env.REDIRECT_URI);
+    params.append("code_verifier", code_verifier);
+
     const response = await fetch("https://id.kick.com/oauth/token", {
       method: "POST",
       headers: {
-        "Content-Type": "application/json"
+        "Content-Type": "application/x-www-form-urlencoded"
       },
-      body: JSON.stringify({
-        grant_type: "authorization_code",
-        code,
-        client_id: process.env.CLIENT_ID,
-        client_secret: process.env.CLIENT_SECRET,
-        redirect_uri: process.env.REDIRECT_URI,
-        code_verifier
-      })
+      body: params.toString()
     });
 
-    const data = await response.json();
+    // ✅ ler resposta como texto primeiro (evita crash)
+    const text = await response.text();
+    console.log("RAW KICK RESPONSE:", text);
 
-    console.log("KICK RESPONSE:", data);
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      data = { raw: text };
+    }
 
-    // 🔥 MOSTRA O ERRO REAL
+    // ❌ se Kick devolveu erro → envia para frontend
     if (!response.ok) {
       return res.status(400).json(data);
     }
 
-    res.status(200).json(data);
+    // ✅ sucesso
+    return res.status(200).json(data);
 
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Server crash", details: err.message });
+    console.error("SERVER ERROR:", err);
+    return res.status(500).json({
+      error: "Server crash",
+      details: err.message
+    });
   }
 }
